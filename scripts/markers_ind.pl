@@ -1,13 +1,15 @@
 use strict;
 use warnings;
 use Getopt::Long;
-use ProBioDiv;
+use ProBioDiv; 
 
 my ($popfile, $population, $species, $position);
 
 my $max_size=1000000;
 
- GetOptions ("popfile=s" => \$popfile,
+$species='all';
+$population='all';
+GetOptions ("popfile=s" => \$popfile,
             "population=s"   => \$population,
             "species=s" => \$species,
             "position=s" => \$position,

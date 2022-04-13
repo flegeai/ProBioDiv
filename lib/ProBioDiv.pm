@@ -164,38 +164,52 @@ sub load {
 	chomp $header;
 	my @header = split "\t", $header;
 	my @individuals=();
-	my %species=();
+	my %selected=();
+    my %species=();
 	for (my $i =2; $i < scalar(@header); $i++) {
 		if ($header[$i] =~ /^A[Vv]/) {
 			my $ind=ProBioDiv::Individual->new(name=> $header[$i],species=>'colza');
-			$species{$ind}='colza';
+			$selected{$ind}=1;
+            $species{$ind}='colza';
 			push @individuals, $ind;
 			next;
 		}
-		if ($header[$i] =~ /^11CC/) {
+		if (($header[$i] =~ /^11CC/)|| ($header[$i] =~ /\d+PBD(1[1-9]|20)\-p\d{2}$/)) {
 		#	print STDERR $header[$i], "\n";
 			my $ind=ProBioDiv::Individual->new(name=> $header[$i],species=>'chou');
-			$species{$ind}='chou';
+			if ($params{'species'} eq 'chou') {$selected{$ind}=1;}
+            else {$selected{$ind}=0}
+            $species{$ind}='chou';
 			push @individuals, $ind;
 			next;
 		}
-		if ($header[$i] =~ /^11AA/) {
+		if (($header[$i] =~ /^11AA/) || ($header[$i] =~ /\d+PBD(0\d|10)\-p\d{2}(B|p\d{2})*$/)) {
 			#	print STDERR $header[$i], "\n";
 				my $ind=ProBioDiv::Individual->new(name=> $header[$i],species=>'navette');
+                if ($params{'species'} eq 'navette') {$selected{$ind}=1;}
+                else {$selected{$ind}=0}
+                $species{$ind}='navette';
 				push @individuals, $ind;
-				$species{$ind}='navette';
 				next;
 		}
-		if ($header[$i] =~ /^\d+-*PRO\d+/) {
-			#print STDERR $header[$i], "\n";
-					my $ind=ProBioDiv::Individual->new(name=> $header[$i],species=>'pro');
-					$species{$ind}='pro';
-					push @individuals, $ind;
-					next;
+#		
+        # All other individuals are probiodiv
+        my ($year,$code,$popnum);
+        if (($year,$code,$popnum)=$header[$i] =~ /^(\d+)(-PRO-|PBD)(\d+)-.+/) {
+		#	print STDERR $popnum, "\n";
+            my $ind=ProBioDiv::Individual->new(name=> $header[$i],species=>'pro');
+            $selected{$ind}=0;
+            $species{$ind}='pro';
+            if (($popnum <= 10)  && ($params{'species'} eq 'navette')) {$selected{$ind}=1}
+            if (($popnum > 10) && ($params{'species'} eq 'chou')) {$selected{$ind}=1}
+            push @individuals, $ind;
+            next;
 		}
+      
 		print STDERR ("Error unknown individual : $header[$i]\n");
 	}
-
+    
+   
 	my @markers=();
 	my @genotypes=();
 	while (<FILE>) {
@@ -204,18 +218,30 @@ sub load {
 			my @fields=split "\t";
 			my $index = shift @fields;
 			my $name = shift @fields;
-
 			my $marker = ProBioDiv::Marker->new(name => $name);
 			push @markers, $marker;
-			for (my $i =0; $i < scalar(@fields); $i++) {
-				my $genotype = ProBioDiv::Genotype->new(marker=>$marker, individual=>$individuals[$i], value=>$fields[$i]);
-				$individuals[$i]->add_genotype($genotype);
-				push @{$genotypes_bank{$species{$individuals[$i]}}{$marker->name()}}, $genotype;
-				push @genotypes, $genotype;
+			for (my $i=0; $i < scalar(@fields); $i++) {
+                if (not defined ($individuals[$i])) {
+                    print "$i - $name ", "h :", $header[$i+2], "\n";
+                    exit(1);
+                }
+                if ($selected{$individuals[$i]}==1) {
+#                    print STDERR "Adding ", $marker->name, " ", $individuals[$i]->name, "\n";
+                    my $genotype = ProBioDiv::Genotype->new(marker=>$marker, individual=>$individuals[$i], value=>$fields[$i]);
+                    $individuals[$i]->add_genotype($genotype);
+                    push @{$genotypes_bank{$species{$individuals[$i]}}{$marker->name()}}, $genotype;
+                    push @genotypes, $genotype;
+                }
 			}
 			#$individuals[$i]->genotypes(\@genotypes);
 	}
-	return ProBioDiv->new(species=> $params{'species'}, population=>$params{'population'}, individuals=>\@individuals, markers=>\@markers, genotypes=>\@genotypes);
+    
+    # remove the not selected individuals from the individuals table
+    my @sel_individuals=();
+    foreach my $ind (@individuals){
+        if ($selected{$ind}==1) {push @sel_individuals,$ind;}
+    }
+	return ProBioDiv->new(species=> $params{'species'}, population=>$params{'population'}, individuals=>\@sel_individuals, markers=>\@markers, genotypes=>\@genotypes);
 }
 
 =head2 add_positions()
@@ -596,6 +622,7 @@ sub markers_ind {
 			foreach my $ind ($self->individuals) {
 				next unless ($ind->species() eq 'pro');
 				my $gt=$ind->get_genotype(marker=>$marker);
+                if (not defined $gt) {print STDERR $marker->name(), " not genotyped for ", $ind->name(), "\n";}
 				if (defined $gt->status()) {print "\t", $gt->status()}
 				else {print "\tundef"}
 			}
