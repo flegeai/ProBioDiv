@@ -55,7 +55,6 @@ sub new() {
 	## Object's attributes
 	my $pbd = bless {
 		'species' => undef,
-		'population'    => undef,
 		'genotypes' => [],
 		'individuals' => [],
 		'markers'      => [],
@@ -135,7 +134,23 @@ sub genotypes {
 	return @{$self->{'genotypes'}};
 }
 
+=head2 populations()
 
+ Title    : populations()
+ Usage    : @pops=$pbd->populations() or $pbd->populations(\@pops);
+ Function : returns the list of populations stored
+ Returns  : a list of populations;
+ Args     : a list of population (ids) or nothing
+
+=cut
+
+sub populations {
+	my $self=shift;
+	if (scalar(@_)) {
+		$self->{'populations'}= \@_;
+	}
+	return @{$self->{'populations'}};
+}
 
 
 =head2 load()
@@ -167,26 +182,27 @@ sub load {
 	my %selected=();
     my %species=();
 	for (my $i =2; $i < scalar(@header); $i++) {
+        my ($year,$code,$popnum);
 		if ($header[$i] =~ /^A[Vv]/) {
-			my $ind=ProBioDiv::Individual->new(name=> $header[$i],species=>'colza');
+			my $ind=ProBioDiv::Individual->new(name=> $header[$i],species=>'colza', population=>$header[$i]);
 			$selected{$ind}=1;
             $species{$ind}='colza';
 			push @individuals, $ind;
 			next;
 		}
-		if (($header[$i] =~ /^11CC/)|| ($header[$i] =~ /\d+PBD(1[1-9]|20)\-p\d{2}$/)) {
+		if (($popnum)=$header[$i] =~ /\d+PBD(1[1-9]|20)\-p\d{2}$/) {
 		#	print STDERR $header[$i], "\n";
-			my $ind=ProBioDiv::Individual->new(name=> $header[$i],species=>'chou');
-			if ($params{'species'} eq 'chou') {$selected{$ind}=1;}
+			my $ind=ProBioDiv::Individual->new(name=> $header[$i],species=>'chou', population=>$popnum);
+			if ($popnum eq $params{'population'}) {$selected{$ind}=1;}
             else {$selected{$ind}=0}
             $species{$ind}='chou';
 			push @individuals, $ind;
 			next;
 		}
-		if (($header[$i] =~ /^11AA/) || ($header[$i] =~ /\d+PBD(0\d|10)\-p\d{2}(B|p\d{2})*$/)) {
+		if (($popnum)=$header[$i] =~ /\d+PBD(0\d|10)\-p\d{2}(B|p\d{2})*$/) {
 			#	print STDERR $header[$i], "\n";
-				my $ind=ProBioDiv::Individual->new(name=> $header[$i],species=>'navette');
-                if ($params{'species'} eq 'navette') {$selected{$ind}=1;}
+				my $ind=ProBioDiv::Individual->new(name=> $header[$i],species=>'navette', population=>$popnum);
+                if ($popnum eq $params{'population'}) {$selected{$ind}=1;}
                 else {$selected{$ind}=0}
                 $species{$ind}='navette';
 				push @individuals, $ind;
@@ -194,14 +210,13 @@ sub load {
 		}
 #		
         # All other individuals are probiodiv
-        my ($year,$code,$popnum);
+
         if (($year,$code,$popnum)=$header[$i] =~ /^(\d+)(-PRO-|PBD)(\d+)-.+/) {
 		#	print STDERR $popnum, "\n";
-            my $ind=ProBioDiv::Individual->new(name=> $header[$i],species=>'pro');
+            my $ind=ProBioDiv::Individual->new(name=> $header[$i],species=>'pro', population=> $popnum);
             $selected{$ind}=0;
             $species{$ind}='pro';
-            if (($popnum <= 10)  && ($params{'species'} eq 'navette')) {$selected{$ind}=1}
-            if (($popnum > 10) && ($params{'species'} eq 'chou')) {$selected{$ind}=1}
+            if ($popnum eq $params{'population'}) {$selected{$ind}=1;}
             push @individuals, $ind;
             next;
 		}
@@ -209,7 +224,7 @@ sub load {
 		print STDERR ("Error unknown individual : $header[$i]\n");
 	}
     
-   
+
 	my @markers=();
 	my @genotypes=();
 	while (<FILE>) {
@@ -241,7 +256,7 @@ sub load {
     foreach my $ind (@individuals){
         if ($selected{$ind}==1) {push @sel_individuals,$ind;}
     }
-	return ProBioDiv->new(species=> $params{'species'}, population=>$params{'population'}, individuals=>\@sel_individuals, markers=>\@markers, genotypes=>\@genotypes);
+	return ProBioDiv->new(species=> $params{'species'}, individuals=>\@sel_individuals, markers=>\@markers, genotypes=>\@genotypes);
 }
 
 =head2 add_positions()
@@ -332,7 +347,7 @@ sub get_genotypes {
 sub get_introgressions {
 	my $self=shift;
  	MRK: foreach my $mrk ($self->markers) {
-   	my @colza_gts=$self->get_genotypes(marker=> $mrk,species=>'colza');
+        my @colza_gts=$self->get_genotypes(marker=> $mrk,species=>'colza');
 		# We remove NA
 		my @good_refs=();
 		my $na=0;
@@ -354,7 +369,7 @@ sub get_introgressions {
 			}
 			push @good_refs, $gt;
 		}
-
+        
 		if (scalar(@good_refs)==0) {
 			#print STDERR "No rapeseed genotype for marker ", $mrk->name(), "\n";
 			$mrk->status("BAD");
@@ -369,25 +384,25 @@ sub get_introgressions {
 			}
 		}
 
+       
+        my @dipl_gts=$self->get_genotypes(marker=> $mrk,species=>$self->species());
 
-		# get the other parent
-		my @dipl_gts=$self->get_genotypes(marker=> $mrk,species=>$self->species());
+        my $non_informative=0;
+        my $polymorphe=0;
 
-		my $non_informative=0;
-		my $polymorphe=0;
+        if (scalar(@dipl_gts) == 0) { # the diploid have not been genotyped
+            print STDERR "No diploïd genotypes for ", $mrk->name(),"\n";
+            $mrk->status("P"); # We are considering that it is polymorphic
+            $polymorphe=1;
+        }
 
-		if (scalar(@dipl_gts) == 0) { # the diploid have not been genotyped
-			$mrk->status("P"); # We are considering that it is polymorphic
-			$polymorphe=1;
-		}
-
-		foreach my $gt (@dipl_gts) {
-			next if ($gt->value() eq '--');
-		#	print STDERR "val:", $gt->value(), "\n";
-			if ($gt->value ne $ref) {
+        foreach my $gt (@dipl_gts) {
+            next if ($gt->value() eq '--');
+            #	print STDERR "val:", $gt->value(), "\n";
+                if ($gt->value ne $ref) {
 	#			print STDERR $mrk->name(), " ref : $ref -- ", "dipl : ", $gt->value(),  "\n";
-				$polymorphe=1;
-				$mrk->status("P");
+                    $polymorphe=1;
+                    $mrk->status("P");
 				if ($gt->value() eq 'AB'){
 					$non_informative=1;
 				}

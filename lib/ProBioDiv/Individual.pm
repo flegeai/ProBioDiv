@@ -47,6 +47,7 @@ sub new() {
 	my $ind = bless {
 		'name'    => undef,
 		'species'      => undef,
+        'population' => undef,
 		'gt_mrk'	=> undef,
 		'genotypes' => [],
 		%attrs
@@ -141,6 +142,23 @@ sub name() {
 		$self->{'name'}= shift;
 	}
 	return $self->{'name'}
+}
+
+=head2 population()
+ Title    : population()
+ Usage    : my $pop= $ind->population() or $ind->population($population);
+ Function : returns the pop of that individual
+ Returns  : a string
+ Args     : a string or nothing
+
+=cut
+
+sub population() {
+	my $self=shift;
+	if (scalar (@_)) {
+		$self->{'population'}= shift;
+	}
+	return $self->{'population'}
 }
 
 1;
