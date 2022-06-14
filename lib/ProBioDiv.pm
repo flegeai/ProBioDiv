@@ -212,7 +212,7 @@ sub load {
         # All other individuals are probiodiv
 
         if (($year,$code,$popnum)=$header[$i] =~ /^(\d+)(-PRO-|PBD)(\d+)-.+/) {
-		#	print STDERR $popnum, "\n";
+			#print STDERR "$header[$i] $popnum\n";
             my $ind=ProBioDiv::Individual->new(name=> $header[$i],species=>'pro', population=> $popnum);
             $selected{$ind}=0;
             $species{$ind}='pro';
@@ -241,7 +241,7 @@ sub load {
                     exit(1);
                 }
                 if ($selected{$individuals[$i]}==1) {
-#                    print STDERR "Adding ", $marker->name, " ", $individuals[$i]->name, "\n";
+                 #  print STDERR "Adding ", $marker->name, " ", $individuals[$i]->name, "\n";
                     my $genotype = ProBioDiv::Genotype->new(marker=>$marker, individual=>$individuals[$i], value=>$fields[$i]);
                     $individuals[$i]->add_genotype($genotype);
                     push @{$genotypes_bank{$species{$individuals[$i]}}{$marker->name()}}, $genotype;
@@ -291,7 +291,7 @@ sub add_positions {
 			$mrk->position($pos{$mrk->name()});
 		}
 		else {
-			print STDERR "marker ", $mrk-> name(), "not located\n";
+#			print STDERR "marker ", $mrk-> name(), "not located\n";
 			$mrk->chromosome("unknown");
 			$mrk->position("NA");
 		}
@@ -358,7 +358,7 @@ sub get_introgressions {
 				$mrk->status("HET");
 				next MRK;
 			}
-			if ($gt->value() eq '--') {
+			if (($gt->value() eq '--') || ($gt->value() eq 'NC')) {
 				$na++;
 				if ($na > 1) {
 					$mrk->status("BAD");
@@ -377,7 +377,8 @@ sub get_introgressions {
 		}
 	 	my $ref=$good_refs[0]->value();
 		foreach my $gt (@good_refs) {
-			if (($gt->value ne $ref) && ($gt->value ne '--')) {
+			if (($gt->value ne $ref) && (($gt->value ne '--') || ($gt->value() eq 'NC')))
+            {
 				#print STDERR "Not usable marker :", $mrk->name(), "\n";
 				$mrk->status("HET");
 				next MRK;
@@ -397,10 +398,10 @@ sub get_introgressions {
         }
 
         foreach my $gt (@dipl_gts) {
-            next if ($gt->value() eq '--');
+            next if (($gt->value() eq '--') || ($gt->value() eq 'NC'));
             #	print STDERR "val:", $gt->value(), "\n";
                 if ($gt->value ne $ref) {
-	#			print STDERR $mrk->name(), " ref : $ref -- ", "dipl : ", $gt->value(),  "\n";
+#				print STDERR $mrk->name(), " ref : $ref -- ", "dipl : ", $gt->value(),  "\n";
                     $polymorphe=1;
                     $mrk->status("P");
 				if ($gt->value() eq 'AB'){
@@ -424,7 +425,7 @@ sub get_introgressions {
 
 		my @desc_gts=$self->get_genotypes(marker=> $mrk,species=>"pro");
 		foreach my $gt (@desc_gts) {
-			if ($gt->value() eq '--') {
+			if (($gt->value() eq '--')|| ($gt->value() eq 'NC')) {
 				#print STDERR "Non informative : mrk ", $mrk->name(), " ind : ", $gt->individual->name(),"\n";
 				$gt->status("Ninf");
 				next;
@@ -561,6 +562,7 @@ sub introgressions_size {
 	my @ints;
 	foreach my $ind ($self->individuals) {
 		next unless ($ind->species() eq 'pro');
+        #print STDERR "Individual : ", $ind->name(),"\n";
 		foreach my $chr(@chrs) {
 			my $int=undef;
 			foreach my $mrk (@{$mrks{$chr}}) {
